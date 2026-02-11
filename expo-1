@@ -1,0 +1,40 @@
+#include <iostream>
+#include <fstream>
+#include <vector>
+#include <windows.h>
+#pragma comment(lib, "urlmon.lib")
+
+using namespace std;
+
+// Функція для отримання температури по місту
+string getTemperature(const string& city) {
+    // Формуємо URL з параметром ?format=%t (повертає лише температуру)
+    string srcURL = "https://wttr.in/" + city + "?format=%t";
+    const char* destFile = "weather.txt"; // тимчасовий файл для збереження даних
+
+    // Завантажуємо дані з сайту у файл
+    if (URLDownloadToFileA(0, srcURL.c_str(), destFile, 0, 0) == S_OK) {
+        ifstream file(destFile); // відкриваємо файл для читання
+        if (file.is_open()) {
+            string temp;
+            file >> temp;          // читаємо перше слово (температура)
+            return temp;           // повертаємо значення
+        }
+    }
+    return "N/A"; // якщо помилка — повертаємо "N/A"
+}
+
+int main() {
+    // Масив з 10 міст
+    vector<string> cities = {
+        "Kyiv", "Odesa", "Lviv", "Kharkiv", "Dnipro",
+        "London", "Paris", "Berlin", "NewYork", "Tokyo"
+    };
+
+    // Виводимо назву міста та температуру
+    for (const auto& city : cities) {
+        cout << city << ": " << getTemperature(city) << endl;
+    }
+
+    return 0;
+}
