@@ -1,0 +1,90 @@
+#define WIN32_LEAN_AND_MEAN
+#include <iostream>
+#include <string>
+#include <windows.h>
+#include <ws2tcpip.h>
+
+#pragma comment (lib, "Ws2_32.lib")
+
+#define DEFAULT_BUFLEN 512
+#define DEFAULT_PORT "27015"
+
+class Client {
+private:
+    SOCKET connectSocket;
+
+public:
+    Client() : connectSocket(INVALID_SOCKET) {}
+
+    bool connectToServer(const std::string& serverName) {
+        WSADATA wsaData;
+        int iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
+        if (iResult != 0) {
+            std::cout << "WSAStartup failed: " << iResult << "\n";
+            return false;
+        }
+
+        struct addrinfo* result = NULL, hints;
+        ZeroMemory(&hints, sizeof(hints));
+        hints.ai_family = AF_INET;
+        hints.ai_socktype = SOCK_STREAM;
+        hints.ai_protocol = IPPROTO_TCP;
+
+        iResult = getaddrinfo(serverName.c_str(), DEFAULT_PORT, &hints, &result);
+        if (iResult != 0) {
+            WSACleanup();
+            return false;
+        }
+
+        connectSocket = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
+        if (connectSocket == INVALID_SOCKET) {
+            freeaddrinfo(result);
+            WSACleanup();
+            return false;
+        }
+
+        iResult = ::connect(connectSocket, result->ai_addr, (int)result->ai_addrlen);
+        freeaddrinfo(result);
+        if (iResult == SOCKET_ERROR) {
+            closesocket(connectSocket);
+            WSACleanup();
+            return false;
+        }
+
+        return true;
+    }
+
+    void sendMessage(const std::string& message) {
+        send(connectSocket, message.c_str(), (int)message.size(), 0);
+
+        char buffer[DEFAULT_BUFLEN];
+        int iResult = recv(connectSocket, buffer, DEFAULT_BUFLEN - 1, 0);
+        if (iResult > 0) {
+            buffer[iResult] = '\0';
+            std::cout << "Server response: " << buffer << "\n";
+        }
+    }
+
+    ~Client() {
+        if (connectSocket != INVALID_SOCKET) {
+            closesocket(connectSocket);
+        }
+        WSACleanup();
+    }
+};
+
+int main() {
+    Client client;
+    if (!client.connectToServer("127.0.0.1")) {
+        std::cout << "Connection failed\n";
+        return 1;
+    }
+
+    std::string input;
+    std::cout << "Enter string: ";
+    std::getline(std::cin, input);
+
+    client.sendMessage(input);
+
+    return 0;
+} client
