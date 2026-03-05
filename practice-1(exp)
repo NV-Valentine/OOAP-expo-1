@@ -1,0 +1,115 @@
+#define WIN32_LEAN_AND_MEAN
+#include <iostream>
+#include <string>
+#include <windows.h>
+#include <ws2tcpip.h>
+
+#pragma comment (lib, "Ws2_32.lib")
+
+#define DEFAULT_BUFLEN 512
+#define DEFAULT_PORT "27015"
+
+class Server {
+private:
+    SOCKET listenSocket;
+
+    static std::string reverseString(const std::string& input) {
+        return std::string(input.rbegin(), input.rend());
+    }
+
+    static DWORD WINAPI ClientHandler(void* param) {
+        SOCKET client = (SOCKET)param;
+        char buffer[DEFAULT_BUFLEN];
+
+        while (true) {
+            int iResult = recv(client, buffer, DEFAULT_BUFLEN - 1, 0);
+            if (iResult <= 0) break;
+
+            buffer[iResult] = '\0';
+            std::string command(buffer);
+
+            // Переворот строки
+            std::string answer = reverseString(command);
+
+            send(client, answer.c_str(), (int)answer.size(), 0);
+        }
+
+        closesocket(client);
+        return 0;
+    }
+
+public:
+    Server() : listenSocket(INVALID_SOCKET) {}
+
+    bool start() {
+        WSADATA wsaData;
+        int iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
+        if (iResult != 0) {
+            std::cout << "WSAStartup failed: " << iResult << "\n";
+            return false;
+        }
+
+        struct addrinfo hints, * result = NULL;
+        ZeroMemory(&hints, sizeof(hints));
+        hints.ai_family = AF_INET;
+        hints.ai_socktype = SOCK_STREAM;
+        hints.ai_protocol = IPPROTO_TCP;
+        hints.ai_flags = AI_PASSIVE;
+
+        iResult = getaddrinfo(NULL, DEFAULT_PORT, &hints, &result);
+        if (iResult != 0) {
+            WSACleanup();
+            return false;
+        }
+
+        listenSocket = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
+        if (listenSocket == INVALID_SOCKET) {
+            freeaddrinfo(result);
+            WSACleanup();
+            return false;
+        }
+
+        iResult = bind(listenSocket, result->ai_addr, (int)result->ai_addrlen);
+        freeaddrinfo(result);
+        if (iResult == SOCKET_ERROR) {
+            closesocket(listenSocket);
+            WSACleanup();
+            return false;
+        }
+
+        iResult = listen(listenSocket, SOMAXCONN);
+        if (iResult == SOCKET_ERROR) {
+            closesocket(listenSocket);
+            WSACleanup();
+            return false;
+        }
+
+        std::cout << "Server is running, waiting for connections...\n";
+
+        while (true) {
+            SOCKET clientSocket = accept(listenSocket, NULL, NULL);
+            if (clientSocket == INVALID_SOCKET) break;
+
+            CreateThread(NULL, 0, ClientHandler, (void*)clientSocket, 0, NULL);
+        }
+
+        return true;
+    }
+
+    ~Server() {
+        if (listenSocket != INVALID_SOCKET) {
+            closesocket(listenSocket);
+        }
+        WSACleanup();
+    }
+};
+
+int main() {
+    Server server;
+    if (!server.start()) {
+        std::cout << "Server failed to start\n";
+        return 1;
+    }
+    return 0;
+}
+server
